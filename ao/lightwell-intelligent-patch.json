@@ -10,7 +10,10 @@
       "parameters": {
         "input_schema": {
           "type": "object",
-          "required": ["advisory_id", "affected_app"],
+          "required": [
+            "advisory_id",
+            "affected_app"
+          ],
           "properties": {
             "advisory_id": {
               "type": "string",
@@ -50,7 +53,10 @@
           }
         }
       },
-      "position": { "x": 0, "y": 120 }
+      "position": {
+        "x": 0,
+        "y": 120
+      }
     },
     {
       "id": "trigger_webhook",
@@ -59,7 +65,10 @@
       "parameters": {
         "webhook_path": "lightwell-advisory"
       },
-      "position": { "x": 0, "y": 360 }
+      "position": {
+        "x": 0,
+        "y": 360
+      }
     }
   ],
   "nodes": [
@@ -68,26 +77,52 @@
       "type": "agentic",
       "name": "Analyze Lightwell Alert",
       "parameters": {
-        "prompt": "You are a Lightwell patch coordinator for Ansible Automation Platform.\n\nA Red Hat / IBM Lightwell advisory has arrived. The firing trigger (manual form or webhook) exposes these fields:\n- advisory_id: ${trigger.advisory_id}\n- cve_id: ${trigger.cve_id}\n- severity: ${trigger.severity}\n- package_name: ${trigger.package_name}\n- patched_version: ${trigger.patched_version}\n- affected_app: ${trigger.affected_app}\n- lightwell_patch_available: ${trigger.lightwell_patch_available}\n\nLightwell is NOT a RHEL errata feed. It publishes surgically backported, digitally signed application-layer dependencies (PyPI, Maven, npm) so production apps do not have to take a breaking major upgrade.\n\nYour job:\n1. Extract advisory_id, cve_id, severity, package_name, patched_version, affected_app, and lightwell_patch_available from those trigger fields.\n2. Use AAP MCP tools if they are available: list job templates and workflow job templates and confirm that 'Lightwell | Application Patch Pipeline' exists in organization Default. Also list inventories and note Demo Inventory.\n3. Decide a single route:\n   - apply_now: lightwell_patch_available is true AND the app environment is not production (staging/dev/build can auto-apply)\n   - approved_patch: lightwell_patch_available is true AND the app is production (human approval required)\n   - investigate: lightwell_patch_available is false, the app is not in the SBOM estate, or the package cannot be identified\n\nIf environment is not stated, treat payments-api as staging and checkout-service as production.\n\nOutput ONLY valid JSON:\n{\n  \"route\": \"apply_now or approved_patch or investigate\",\n  \"advisory_id\": \"\",\n  \"cve_id\": \"\",\n  \"severity\": \"\",\n  \"package_name\": \"\",\n  \"patched_version\": \"\",\n  \"affected_app\": \"\",\n  \"lightwell_patch_available\": false,\n  \"aap_workflow_name\": \"Lightwell | Application Patch Pipeline\",\n  \"confidence\": 0.0,\n  \"reasoning\": \"one or two sentences\"\n}",
+        "prompt": "You are a Lightwell patch coordinator for Ansible Automation Platform.\n\nA Red Hat / IBM Lightwell advisory has arrived. The firing trigger (manual form or webhook) exposes these fields:\n- advisory_id: ${trigger.advisory_id}\n- cve_id: ${trigger.cve_id}\n- severity: ${trigger.severity}\n- package_name: ${trigger.package_name}\n- patched_version: ${trigger.patched_version}\n- affected_app: ${trigger.affected_app}\n- lightwell_patch_available: ${trigger.lightwell_patch_available}\n\nLightwell is NOT a RHEL errata feed. It publishes surgically backported, digitally signed application-layer dependencies (PyPI, Maven, npm) so production apps do not have to take a breaking major upgrade.\n\nYour job:\n1. Extract advisory_id, cve_id, severity, package_name, patched_version, affected_app, and lightwell_patch_available from those trigger fields.\n2. Use AAP MCP tools if they are available: list job templates and workflow job templates and confirm that 'Lightwell | Application Patch Pipeline' exists in organization Default. Also list inventories and note Demo Inventory.\n3. Decide a single route:\n   - apply_now: lightwell_patch_available is true AND the app environment is not production (staging/dev/build can auto-apply)\n   - approved_patch: lightwell_patch_available is true AND the app is production (human approval required)\n   - investigate: lightwell_patch_available is false, the app is not in the SBOM estate, or the package cannot be identified\n\nIf environment is not stated, treat payments-api as staging and checkout-service as production.\n\nThe JSON MUST have a top-level key named route. Do not wrap the object in final or any other key.\n\nOutput ONLY valid JSON:\n{\n  \"route\": \"apply_now or approved_patch or investigate\",\n  \"advisory_id\": \"\",\n  \"cve_id\": \"\",\n  \"severity\": \"\",\n  \"package_name\": \"\",\n  \"patched_version\": \"\",\n  \"affected_app\": \"\",\n  \"lightwell_patch_available\": false,\n  \"aap_workflow_name\": \"Lightwell | Application Patch Pipeline\",\n  \"confidence\": 0.0,\n  \"reasoning\": \"one or two sentences\"\n}",
         "responseSchema": {
           "type": "object",
+          "required": ["route"],
           "properties": {
-            "route": { "type": "string" },
-            "advisory_id": { "type": "string" },
-            "cve_id": { "type": "string" },
-            "severity": { "type": "string" },
-            "package_name": { "type": "string" },
-            "patched_version": { "type": "string" },
-            "affected_app": { "type": "string" },
-            "lightwell_patch_available": { "type": "boolean" },
-            "aap_workflow_name": { "type": "string" },
-            "confidence": { "type": "number" },
-            "reasoning": { "type": "string" }
+            "route": {
+              "type": "string"
+            },
+            "advisory_id": {
+              "type": "string"
+            },
+            "cve_id": {
+              "type": "string"
+            },
+            "severity": {
+              "type": "string"
+            },
+            "package_name": {
+              "type": "string"
+            },
+            "patched_version": {
+              "type": "string"
+            },
+            "affected_app": {
+              "type": "string"
+            },
+            "lightwell_patch_available": {
+              "type": "boolean"
+            },
+            "aap_workflow_name": {
+              "type": "string"
+            },
+            "confidence": {
+              "type": "number"
+            },
+            "reasoning": {
+              "type": "string"
+            }
           }
         },
-        "tool_selection_strategy": "ALL"
+        "tool_selection_strategy": "NONE"
       },
-      "position": { "x": 360, "y": 220 }
+      "position": {
+        "x": 360,
+        "y": 220
+      }
     },
     {
       "id": "route_switch",
@@ -98,22 +133,25 @@
           {
             "port": "case_0",
             "label": "Auto-apply (non-prod)",
-            "condition": "${analyze_agent.result.content.route} == 'apply_now'"
+            "condition": "('route' in ${analyze_agent.result.content} and ${analyze_agent.result.content.route} == 'apply_now') or ('final' in ${analyze_agent.result.content} and (${analyze_agent.result.content.final} == 'apply_now' or 'apply_now' in ${analyze_agent.result.content.final}))"
           },
           {
             "port": "case_1",
             "label": "Approval required (prod)",
-            "condition": "${analyze_agent.result.content.route} == 'approved_patch'"
+            "condition": "('route' in ${analyze_agent.result.content} and ${analyze_agent.result.content.route} == 'approved_patch') or ('final' in ${analyze_agent.result.content} and (${analyze_agent.result.content.final} == 'approved_patch' or 'approved_patch' in ${analyze_agent.result.content.final}))"
           },
           {
             "port": "case_2",
             "label": "Investigate",
-            "condition": "${analyze_agent.result.content.route} == 'investigate'"
+            "condition": "('route' in ${analyze_agent.result.content} and ${analyze_agent.result.content.route} == 'investigate') or ('final' in ${analyze_agent.result.content} and (${analyze_agent.result.content.final} == 'investigate' or 'investigate' in ${analyze_agent.result.content.final}))"
           }
         ],
         "default_port": "default"
       },
-      "position": { "x": 740, "y": 220 }
+      "position": {
+        "x": 740,
+        "y": 220
+      }
     },
     {
       "id": "launch_aap_auto",
@@ -124,24 +162,30 @@
         "job_template_name": "Lightwell | Launch Patch Workflow",
         "organization_name": "Default",
         "extra_vars": {
-          "advisory_id": "${analyze_agent.result.content.advisory_id}",
-          "cve_id": "${analyze_agent.result.content.cve_id}",
-          "severity": "${analyze_agent.result.content.severity}",
-          "package_name": "${analyze_agent.result.content.package_name}",
-          "patched_version": "${analyze_agent.result.content.patched_version}",
-          "affected_app": "${analyze_agent.result.content.affected_app}",
-          "target_app": "${analyze_agent.result.content.affected_app}",
-          "lightwell_patch_available": "${analyze_agent.result.content.lightwell_patch_available}"
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "severity": "${trigger.severity}",
+          "package_name": "${trigger.package_name}",
+          "patched_version": "${trigger.patched_version}",
+          "affected_app": "${trigger.affected_app}",
+          "target_app": "${trigger.affected_app}",
+          "lightwell_patch_available": "${trigger.lightwell_patch_available}"
         }
       },
-      "position": { "x": 1100, "y": 40 }
+      "position": {
+        "x": 1100,
+        "y": 40
+      }
     },
     {
       "id": "approval_prod",
       "type": "approval",
       "name": "Approve Production Lightwell Patch",
       "parameters": {},
-      "position": { "x": 1100, "y": 220 }
+      "position": {
+        "x": 1100,
+        "y": 220
+      }
     },
     {
       "id": "launch_aap_prod",
@@ -152,27 +196,41 @@
         "job_template_name": "Lightwell | Launch Patch Workflow",
         "organization_name": "Default",
         "extra_vars": {
-          "advisory_id": "${analyze_agent.result.content.advisory_id}",
-          "cve_id": "${analyze_agent.result.content.cve_id}",
-          "severity": "${analyze_agent.result.content.severity}",
-          "package_name": "${analyze_agent.result.content.package_name}",
-          "patched_version": "${analyze_agent.result.content.patched_version}",
-          "affected_app": "${analyze_agent.result.content.affected_app}",
-          "target_app": "${analyze_agent.result.content.affected_app}",
-          "lightwell_patch_available": "${analyze_agent.result.content.lightwell_patch_available}"
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "severity": "${trigger.severity}",
+          "package_name": "${trigger.package_name}",
+          "patched_version": "${trigger.patched_version}",
+          "affected_app": "${trigger.affected_app}",
+          "target_app": "${trigger.affected_app}",
+          "lightwell_patch_available": "${trigger.lightwell_patch_available}"
         }
       },
-      "position": { "x": 1460, "y": 220 }
+      "position": {
+        "x": 1460,
+        "y": 220
+      }
     },
     {
       "id": "rejected_prod",
-      "type": "script",
+      "type": "aap_job_template",
       "name": "Production Patch Rejected",
       "parameters": {
-        "language": "python",
-        "code": "print('Operator rejected the production Lightwell patch. Application stays on the vulnerable dependency.')"
+        "diff_mode": false,
+        "job_template_name": "Lightwell | Notify Complete",
+        "organization_name": "Default",
+        "extra_vars": {
+          "notify_status": "skipped",
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "target_app": "${trigger.affected_app}",
+          "recommended_action": "Operator rejected the production Lightwell patch. Application stays on the vulnerable dependency."
+        }
       },
-      "position": { "x": 1460, "y": 380 }
+      "position": {
+        "x": 1460,
+        "y": 380
+      }
     },
     {
       "id": "investigate_agent",
@@ -183,16 +241,29 @@
         "responseSchema": {
           "type": "object",
           "properties": {
-            "host_actually_affected": { "type": "boolean" },
-            "workaround_available": { "type": "boolean" },
-            "workaround_description": { "type": "string" },
-            "risk_summary": { "type": "string" },
-            "recommended_action": { "type": "string" }
+            "host_actually_affected": {
+              "type": "boolean"
+            },
+            "workaround_available": {
+              "type": "boolean"
+            },
+            "workaround_description": {
+              "type": "string"
+            },
+            "risk_summary": {
+              "type": "string"
+            },
+            "recommended_action": {
+              "type": "string"
+            }
           }
         },
-        "tool_selection_strategy": "ALL"
+        "tool_selection_strategy": "NONE"
       },
-      "position": { "x": 1100, "y": 500 }
+      "position": {
+        "x": 1100,
+        "y": 500
+      }
     },
     {
       "id": "notify_investigate",
@@ -204,13 +275,16 @@
         "organization_name": "Default",
         "extra_vars": {
           "notify_status": "investigate",
-          "advisory_id": "${analyze_agent.result.content.advisory_id}",
-          "cve_id": "${analyze_agent.result.content.cve_id}",
-          "target_app": "${analyze_agent.result.content.affected_app}",
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "target_app": "${trigger.affected_app}",
           "recommended_action": "${investigate_agent.result.content.recommended_action}"
         }
       },
-      "position": { "x": 1460, "y": 500 }
+      "position": {
+        "x": 1460,
+        "y": 500
+      }
     },
     {
       "id": "notify_patched",
@@ -222,13 +296,16 @@
         "organization_name": "Default",
         "extra_vars": {
           "notify_status": "patched",
-          "advisory_id": "${analyze_agent.result.content.advisory_id}",
-          "cve_id": "${analyze_agent.result.content.cve_id}",
-          "target_app": "${analyze_agent.result.content.affected_app}",
-          "patched_version": "${analyze_agent.result.content.patched_version}"
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "target_app": "${trigger.affected_app}",
+          "patched_version": "${trigger.patched_version}"
         }
       },
-      "position": { "x": 1460, "y": 40 }
+      "position": {
+        "x": 1460,
+        "y": 40
+      }
     },
     {
       "id": "notify_patched_prod",
@@ -240,37 +317,93 @@
         "organization_name": "Default",
         "extra_vars": {
           "notify_status": "patched",
-          "advisory_id": "${analyze_agent.result.content.advisory_id}",
-          "cve_id": "${analyze_agent.result.content.cve_id}",
-          "target_app": "${analyze_agent.result.content.affected_app}",
-          "patched_version": "${analyze_agent.result.content.patched_version}"
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "target_app": "${trigger.affected_app}",
+          "patched_version": "${trigger.patched_version}"
         }
       },
-      "position": { "x": 1820, "y": 220 }
+      "position": {
+        "x": 1820,
+        "y": 220
+      }
     },
     {
       "id": "default_skip",
-      "type": "script",
+      "type": "aap_job_template",
       "name": "Unhandled Lightwell Route",
       "parameters": {
-        "language": "python",
-        "code": "print('Analyze agent did not return apply_now, approved_patch, or investigate. No AAP workflow will be launched.')"
+        "diff_mode": false,
+        "job_template_name": "Lightwell | Notify Complete",
+        "organization_name": "Default",
+        "extra_vars": {
+          "notify_status": "skipped",
+          "advisory_id": "${trigger.advisory_id}",
+          "cve_id": "${trigger.cve_id}",
+          "target_app": "${trigger.affected_app}",
+          "recommended_action": "Analyze agent did not return apply_now, approved_patch, or investigate."
+        }
       },
-      "position": { "x": 1100, "y": 680 }
+      "position": {
+        "x": 1100,
+        "y": 680
+      }
     }
   ],
   "edges": [
-    { "from": "trigger_manual", "to": "analyze_agent" },
-    { "from": "trigger_webhook", "to": "analyze_agent" },
-    { "from": "analyze_agent", "to": "route_switch" },
-    { "from": "route_switch", "to": "launch_aap_auto", "from_port": "case_0" },
-    { "from": "launch_aap_auto", "to": "notify_patched" },
-    { "from": "route_switch", "to": "approval_prod", "from_port": "case_1" },
-    { "from": "approval_prod", "to": "launch_aap_prod", "from_port": "approved" },
-    { "from": "approval_prod", "to": "rejected_prod", "from_port": "rejected" },
-    { "from": "launch_aap_prod", "to": "notify_patched_prod" },
-    { "from": "route_switch", "to": "investigate_agent", "from_port": "case_2" },
-    { "from": "investigate_agent", "to": "notify_investigate" },
-    { "from": "route_switch", "to": "default_skip", "from_port": "default" }
+    {
+      "from": "trigger_manual",
+      "to": "analyze_agent"
+    },
+    {
+      "from": "trigger_webhook",
+      "to": "analyze_agent"
+    },
+    {
+      "from": "analyze_agent",
+      "to": "route_switch"
+    },
+    {
+      "from": "route_switch",
+      "to": "launch_aap_auto",
+      "from_port": "case_0"
+    },
+    {
+      "from": "launch_aap_auto",
+      "to": "notify_patched"
+    },
+    {
+      "from": "route_switch",
+      "to": "approval_prod",
+      "from_port": "case_1"
+    },
+    {
+      "from": "approval_prod",
+      "to": "launch_aap_prod",
+      "from_port": "approved"
+    },
+    {
+      "from": "approval_prod",
+      "to": "rejected_prod",
+      "from_port": "rejected"
+    },
+    {
+      "from": "launch_aap_prod",
+      "to": "notify_patched_prod"
+    },
+    {
+      "from": "route_switch",
+      "to": "investigate_agent",
+      "from_port": "case_2"
+    },
+    {
+      "from": "investigate_agent",
+      "to": "notify_investigate"
+    },
+    {
+      "from": "route_switch",
+      "to": "default_skip",
+      "from_port": "default"
+    }
   ]
 }

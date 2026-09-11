@@ -55,9 +55,9 @@ Workflow export: [`ao/lightwell-intelligent-patch.json`](ao/lightwell-intelligen
 ```text
 Manual trigger or webhook /lightwell-advisory
         ▼
-Analyze Lightwell Alert  (agent + AAP MCP tools)
+Analyze Lightwell Alert  (agent; routes from trigger fields)
         ▼
-Switch on route
+    Switch on route
   apply_now        → Launch AAP workflow → Notify patched
   approved_patch   → Human approval → Launch AAP workflow
   investigate      → Investigate agent → Notify investigate
@@ -65,7 +65,9 @@ Switch on route
 
 AO does the **decisioning**. AAP still does the **work** (repo sync, rebuild, test, promote).
 
-Agent nodes need an **LLM Provider** credential in AO. This `aap-demo` cluster currently has AAP and MCP integrations wired, but no LLM credential. Import still succeeds; add an LLM credential on the two agentic nodes before running Demo 2 end-to-end. Until then, Demo 1 and a direct AAP workflow launch are the reliable paths.
+Agent nodes need an **LLM Provider** credential **and** an enabled model (`llm_model_id`) in AO. `setup/configure_demo.py` auto-binds the `RH MaaS` credential when it exists (override with `AO_AGENT_CREDENTIAL_ID` / `AO_AGENT_LLM_MODEL_ID`). Without that binding, Analyze Lightwell Alert fails with `LLMConfigurationError` during streaming.
+
+Do not attach the cluster **aap-demo MCP Server** to those agent nodes on this MicroShift cluster: its route is `*.apps.127.0.0.1.nip.io`, which AO pods resolve to themselves, and Analyze then fails with `ToolDiscoveryError`. The agent already has the trigger fields it needs to choose `apply_now` / `approved_patch` / `investigate`.
 
 ## Sample alerts
 

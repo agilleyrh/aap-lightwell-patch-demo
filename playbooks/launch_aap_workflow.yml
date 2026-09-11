@@ -35,17 +35,16 @@
     - name: Build auth headers
       ansible.builtin.set_fact:
         __aap_headers: "{{ {'Content-Type': 'application/json'} | combine({'Authorization': 'Bearer ' ~ controller_token} if controller_token | length > 0 else {}) }}"
-        __aap_user: "{{ controller_username if controller_token | length == 0 else omit }}"
-        __aap_pass: "{{ controller_password if controller_token | length == 0 else omit }}"
+        __aap_use_basic: "{{ controller_token | length == 0 }}"
 
     - name: Look up the Lightwell workflow job template
       ansible.builtin.uri:
         url: "{{ __aap_base }}/api/controller/v2/workflow_job_templates/?name={{ workflow_name | urlencode }}"
         method: GET
         headers: "{{ __aap_headers }}"
-        url_username: "{{ __aap_user }}"
-        url_password: "{{ __aap_pass }}"
-        force_basic_auth: "{{ controller_token | length == 0 }}"
+        url_username: "{{ controller_username if __aap_use_basic else omit }}"
+        url_password: "{{ controller_password if __aap_use_basic else omit }}"
+        force_basic_auth: "{{ __aap_use_basic }}"
         validate_certs: "{{ controller_verify | bool }}"
       register: __wf
 
@@ -60,9 +59,9 @@
         url: "{{ __aap_base }}/api/controller/v2/workflow_job_templates/{{ __wf.json.results[0].id }}/launch/"
         method: POST
         headers: "{{ __aap_headers }}"
-        url_username: "{{ __aap_user }}"
-        url_password: "{{ __aap_pass }}"
-        force_basic_auth: "{{ controller_token | length == 0 }}"
+        url_username: "{{ controller_username if __aap_use_basic else omit }}"
+        url_password: "{{ controller_password if __aap_use_basic else omit }}"
+        force_basic_auth: "{{ __aap_use_basic }}"
         validate_certs: "{{ controller_verify | bool }}"
         body_format: json
         body:
@@ -83,9 +82,9 @@
         url: "{{ __aap_base }}/api/controller/v2/workflow_jobs/{{ __launch.json.workflow_job | default(__launch.json.id) }}/"
         method: GET
         headers: "{{ __aap_headers }}"
-        url_username: "{{ __aap_user }}"
-        url_password: "{{ __aap_pass }}"
-        force_basic_auth: "{{ controller_token | length == 0 }}"
+        url_username: "{{ controller_username if __aap_use_basic else omit }}"
+        url_password: "{{ controller_password if __aap_use_basic else omit }}"
+        force_basic_auth: "{{ __aap_use_basic }}"
         validate_certs: "{{ controller_verify | bool }}"
       register: __job
       until: __job.json.status in ['successful', 'failed', 'error', 'canceled']

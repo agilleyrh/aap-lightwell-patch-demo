@@ -41,6 +41,9 @@ JOB_TEMPLATES = [
     ("Lightwell | Launch Patch Workflow", "playbooks/launch_aap_workflow.yml", True),
 ]
 
+# Built-in AO credential type for LLM Provider integrations.
+LLM_PROVIDER_TYPE_ID = "87c95d7f-ad31-4101-942e-b608c2c7f4eb"
+
 
 class API:
     def __init__(self, base: str, token: str | None = None, username: str | None = None, password: str | None = None) -> None:
@@ -497,6 +500,60 @@ def ao_items(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+def integration_type(item: dict[str, Any]) -> str:
+    configuration = item.get("configuration") or {}
+    return str(configuration.get("integration_type") or "")
+
+
+def resolve_ao_agent_llm(
+    ao: API,
+    credentials: list[dict[str, Any]],
+    integrations: list[dict[str, Any]],
+) -> dict[str, str] | None:
+    """Bind agent nodes to a local LLM Provider credential and enabled model.
+
+    AO agentic nodes need both ``credential_id`` and ``llm_model_id``. Without
+    them the agent orchestrator falls back to empty global LLM settings and
+    fails with LLMConfigurationError during streaming.
+    """
+    cred_id = os.environ.get("AO_AGENT_CREDENTIAL_ID") or os.environ.get("LIGHTWELL_AO_AGENT_CREDENTIAL_ID")
+    model_id = os.environ.get("AO_AGENT_LLM_MODEL_ID") or os.environ.get("LIGHTWELL_AO_AGENT_LLM_MODEL_ID")
+    preferred_name = os.environ.get("AO_AGENT_CREDENTIAL_NAME", "RH MaaS")
+
+    cred = next((item for item in credentials if cred_id and item.get("id") == cred_id), None)
+    if cred is None:
+        cred = next((item for item in credentials if item.get("name") == preferred_name), None)
+    if cred is None:
+        cred = next((item for item in credentials if item.get("credential_type_id") == LLM_PROVIDER_TYPE_ID), None)
+    if cred is None:
+        return None
+
+    llm_int = next(
+        (
+            item
+            for item in integrations
+            if integration_type(item) == "llm_provider" and item.get("name") == cred.get("name")
+        ),
+        None,
+    )
+    if llm_int is None:
+        llm_int = next((item for item in integrations if integration_type(item) == "llm_provider"), None)
+
+    if not model_id and llm_int:
+        models = ao_items(ao.request(f"/api/v1/integrations/{llm_int['id']}/models"))
+        enabled = [item for item in models if item.get("enabled")]
+        chosen = next((item for item in enabled if item.get("is_default")), None) or (enabled[0] if enabled else None)
+        if chosen:
+            model_id = chosen["id"]
+
+    if not model_id:
+        print(f"  warning: LLM credential {cred.get('name')} has no enabled model")
+        return None
+
+    print(f"  binding agent nodes to LLM {cred.get('name')} model {model_id}")
+    return {"credential_id": cred["id"], "llm_model_id": model_id}
+
+
 def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str, Any]:
     print("Configuring Automation Orchestrator")
     login = API(f"https://{host}").request("/api/v1/auth/login", "POST", {"username": "admin", "password": password})
@@ -516,6 +573,10 @@ def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str
     if not aap_cred or not aap_int:
         raise RuntimeError("aap-demo AAP integration/credential is missing from AO")
 
+    agent_llm = resolve_ao_agent_llm(ao, credentials, integrations)
+    if agent_llm is None:
+        print("  warning: no LLM Provider credential found; agent nodes will fail until one is attached")
+
     document = json.loads(AO_WORKFLOW_FILE.read_text())
     for node in document.get("nodes", []):
         if node.get("type") == "aap_job_template":
@@ -524,8 +585,15 @@ def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str
             node["parameters"]["integration_id"] = aap_int["id"]
         if node.get("type") == "agentic":
             node.setdefault("parameters", {})
-            node["parameters"]["tool_selection_strategy"] = "ALL"
-            node["parameters"].pop("credential_id", None)
+            node["parameters"]["tool_selection_strategy"] = "NONE"
+            node["parameters"].pop("integration_connections", None)
+            node["parameters"].pop("tool_selections", None)
+            if agent_llm:
+                node["parameters"]["credential_id"] = agent_llm["credential_id"]
+                node["parameters"]["llm_model_id"] = agent_llm["llm_model_id"]
+            else:
+                node["parameters"].pop("credential_id", None)
+                node["parameters"].pop("llm_model_id", None)
 
     existing = ao_items(ao.request("/api/v1/workflows?limit=100"))
     current = next((item for item in existing if item.get("name") == document["name"]), None)
