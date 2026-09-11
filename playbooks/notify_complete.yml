@@ -1,0 +1,46 @@
+---
+- name: Summarize the Lightwell patch pipeline
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    lw_default_status: patched
+    lw_default_advisory_id: LW-2026-00412
+    lw_default_app: payments-api
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        notify_status: "{{ notify_status | default(lw_default_status, true) }}"
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+        cve_id: "{{ cve_id | default('', true) }}"
+        target_app: "{{ target_app | default(lw_default_app, true) }}"
+        patched_version: "{{ patched_version | default('', true) }}"
+        image_tag: "{{ image_tag | default('', true) }}"
+        promoted_env: "{{ promoted_env | default('', true) }}"
+        recommended_action: "{{ recommended_action | default('', true) }}"
+
+    - name: Build the operator-facing summary
+      ansible.builtin.set_fact:
+        lw_summary: >-
+          {{
+            {
+              'patched': 'Lightwell patch applied, tested, and promoted for ' ~ target_app ~ '.',
+              'investigate': 'No Lightwell Network patch is available yet. ' ~ target_app ~ ' remains on the vulnerable version; open an investigation for ' ~ advisory_id ~ '.',
+              'skipped': 'Advisory ' ~ advisory_id ~ ' was skipped by policy.'
+            }[notify_status] | default('Lightwell pipeline finished with status ' ~ notify_status ~ '.')
+          }}
+
+    - name: Show Lightwell pipeline summary
+      ansible.builtin.debug:
+        msg:
+          - "{{ lw_summary }}"
+          - "advisory={{ advisory_id }} cve={{ cve_id }} app={{ target_app }}"
+          - "patched_version={{ patched_version }} image={{ image_tag }} env={{ promoted_env }}"
+          - "action={{ recommended_action }} status={{ notify_status }}"
+
+    - name: Publish notify artifacts
+      ansible.builtin.set_stats:
+        data:
+          notify_status: "{{ notify_status }}"
+          summary: "{{ lw_summary }}"
+        per_host: false

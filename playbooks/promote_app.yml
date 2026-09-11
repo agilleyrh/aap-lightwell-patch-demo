@@ -1,0 +1,87 @@
+---
+- name: Promote the patched application through staging into production
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../vars/main.yml"
+  vars:
+    lw_default_advisory_id: LW-2026-00412
+    lw_default_app: payments-api
+    lw_default_test_result: passed
+    lw_default_promote_to: production
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+        target_app: "{{ target_app | default(lw_default_app, true) }}"
+        artifact_path: "{{ artifact_path | default(lightwell_work_dir ~ '/builds/' ~ (target_app | default(lw_default_app, true)) ~ '/artifact.json', true) }}"
+        test_result: "{{ test_result | default(lw_default_test_result, true) }}"
+        promote_to: "{{ promote_to | default(lw_default_promote_to, true) }}"
+
+    - name: Refuse promotion when tests did not pass
+      ansible.builtin.assert:
+        that:
+          - test_result == "passed"
+        fail_msg: Tests did not pass; {{ target_app }} will not be promoted
+
+    - name: Load build artifact
+      ansible.builtin.slurp:
+        src: "{{ artifact_path }}"
+      register: __artifact
+
+    - name: Parse artifact
+      ansible.builtin.set_fact:
+        lw_artifact: "{{ __artifact.content | b64decode | from_json }}"
+
+    - name: Create environment promotion directories
+      ansible.builtin.file:
+        path: "{{ lightwell_work_dir }}/environments/{{ item }}/{{ target_app }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - staging
+        - production
+
+    - name: Promote into staging
+      ansible.builtin.copy:
+        dest: "{{ lightwell_work_dir }}/environments/staging/{{ target_app }}/artifact.json"
+        mode: "0644"
+        content: "{{ lw_artifact | combine({'promoted_to': 'staging', 'promoted_at': now(utc=true).isoformat()}) | to_nice_json }}\n"
+
+    - name: Promote into production
+      ansible.builtin.copy:
+        dest: "{{ lightwell_work_dir }}/environments/production/{{ target_app }}/artifact.json"
+        mode: "0644"
+        content: "{{ lw_artifact | combine({'promoted_to': promote_to, 'promoted_at': now(utc=true).isoformat()}) | to_nice_json }}\n"
+      when: promote_to == "production"
+
+    - name: Compose promotion record
+      ansible.builtin.set_fact:
+        lw_promotion_record:
+          app: "{{ target_app }}"
+          advisory_id: "{{ advisory_id }}"
+          cve_id: "{{ cve_id | default('') }}"
+          image: "{{ lw_artifact.image }}"
+          path: "build -> staging -> {{ promote_to }}"
+          result: promoted
+
+    - name: Write promotion record
+      ansible.builtin.copy:
+        dest: "{{ lightwell_work_dir }}/environments/{{ promote_to }}/{{ target_app }}/promotion.json"
+        mode: "0644"
+        content: "{{ lw_promotion_record | to_nice_json }}\n"
+
+    - name: Show promotion result
+      ansible.builtin.debug:
+        msg:
+          - "Promoted {{ lw_artifact.image }} through staging into {{ promote_to }}"
+          - "Lightwell advisory {{ advisory_id }} is now live on {{ target_app }}"
+
+    - name: Publish promotion artifacts
+      ansible.builtin.set_stats:
+        data:
+          promoted_env: "{{ promote_to }}"
+          promotion_record: "{{ lightwell_work_dir }}/environments/{{ promote_to }}/{{ target_app }}/promotion.json"
+          promotion_status: promoted
+        per_host: false

@@ -1,0 +1,88 @@
+---
+- name: Sync the signed Lightwell package into the local cache
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../vars/main.yml"
+  vars:
+    lw_default_advisory_id: LW-2026-00412
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+
+    - name: Load Lightwell catalog index
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../catalog/index.yml"
+        name: catalog
+
+    - name: Select the matching Lightwell package
+      ansible.builtin.set_fact:
+        lightwell_pkg: >-
+          {{ catalog.packages
+             | selectattr('advisory_id', 'equalto', advisory_id)
+             | list
+             | first
+             | default({}) }}
+
+    - name: Require a catalog path
+      ansible.builtin.assert:
+        that:
+          - lightwell_pkg.path | default('') | length > 0
+        fail_msg: >-
+          Catalog has no signed package path for {{ advisory_id }}.
+          Lightwell Network has not published a backport yet.
+
+    - name: Create the local Lightwell cache
+      ansible.builtin.file:
+        path: "{{ lightwell_work_dir }}/cache/{{ advisory_id }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync signed Lightwell package metadata
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../catalog/{{ lightwell_pkg.path }}/"
+        dest: "{{ lightwell_work_dir }}/cache/{{ advisory_id }}/"
+        mode: preserve
+
+    - name: Read package metadata
+      ansible.builtin.slurp:
+        src: "{{ lightwell_work_dir }}/cache/{{ advisory_id }}/METADATA.json"
+      register: __meta
+
+    - name: Read Lightwell signature
+      ansible.builtin.slurp:
+        src: "{{ lightwell_work_dir }}/cache/{{ advisory_id }}/signature.txt"
+      register: __sig
+
+    - name: Parse metadata
+      ansible.builtin.set_fact:
+        package_meta: "{{ __meta.content | b64decode | from_json }}"
+        signature_text: "{{ __sig.content | b64decode }}"
+
+    - name: Verify simulated Lightwell signature
+      ansible.builtin.assert:
+        that:
+          - "'VALID' in signature_text"
+          - package_meta.signature | length > 0
+          - package_meta.advisory_id == advisory_id
+        fail_msg: Lightwell signature verification failed for {{ advisory_id }}
+
+    - name: Show catalog sync result
+      ansible.builtin.debug:
+        msg:
+          - "Synced {{ package_meta.name }}=={{ package_meta.version }} from simulated Lightwell Network"
+          - "Upstream base {{ package_meta.upstream_base }} remains API compatible"
+          - "Signature {{ package_meta.signature }} validated"
+          - "Cache {{ lightwell_work_dir }}/cache/{{ advisory_id }}"
+
+    - name: Publish sync artifacts
+      ansible.builtin.set_stats:
+        data:
+          lightwell_cache: "{{ lightwell_work_dir }}/cache/{{ advisory_id }}"
+          patched_version: "{{ package_meta.version }}"
+          package_name: "{{ package_meta.name }}"
+          lightwell_signature: "{{ package_meta.signature }}"
+          lightwell_repo_synced: true
+        per_host: false

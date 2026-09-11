@@ -1,0 +1,17 @@
+{
+  "source": "lightwell-clearinghouse",
+  "advisory_id": "LW-2026-00418",
+  "cve_id": "CVE-2026-55118",
+  "title": "Apache Commons Text interpolation follow-on",
+  "severity": "Moderate",
+  "cvss_score": 5.4,
+  "ecosystem": "maven",
+  "package_name": "org.apache.commons:commons-text",
+  "installed_version": "1.10.0",
+  "patched_version": null,
+  "lightwell_patch_available": false,
+  "lightwell_repo": null,
+  "affected_app": "checkout-service",
+  "environment": "production",
+  "recommended_action": "investigate"
+}

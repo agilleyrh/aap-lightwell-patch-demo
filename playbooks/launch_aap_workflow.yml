@@ -1,0 +1,109 @@
+---
+- name: Launch the shared Lightwell AAP workflow and wait for it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    lw_default_workflow: "Lightwell | Application Patch Pipeline"
+    lw_default_advisory_id: LW-2026-00412
+    lw_default_cve: CVE-2026-55102
+    lw_default_severity: Critical
+    lw_default_package: urllib3
+    lw_default_nvr: "2.2.3+lightwell1"
+    lw_default_app: payments-api
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        workflow_name: "{{ workflow_name | default(lw_default_workflow, true) }}"
+        controller_host: "{{ lookup('env', 'CONTROLLER_HOST') | default(lookup('env', 'TOWER_HOST'), true) }}"
+        controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default(lookup('env', 'TOWER_USERNAME'), true) }}"
+        controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default(lookup('env', 'TOWER_PASSWORD'), true) }}"
+        controller_token: "{{ lookup('env', 'CONTROLLER_OAUTH_TOKEN') | default(lookup('env', 'TOWER_OAUTH_TOKEN'), true) }}"
+        controller_verify: "{{ lookup('env', 'CONTROLLER_VERIFY_SSL') | default('false', true) }}"
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+        cve_id: "{{ cve_id | default(lw_default_cve, true) }}"
+        severity: "{{ severity | default(lw_default_severity, true) }}"
+        package_name: "{{ package_name | default(lw_default_package, true) }}"
+        patched_version: "{{ patched_version | default(lw_default_nvr, true) }}"
+        affected_app: "{{ affected_app | default(target_app | default(lw_default_app, true), true) }}"
+        lightwell_patch_available: "{{ lightwell_patch_available | default(true) }}"
+
+    - name: Normalize controller host
+      ansible.builtin.set_fact:
+        __aap_base: "{{ controller_host | regex_replace('/api/controller/?$', '') | regex_replace('/$', '') }}"
+
+    - name: Build auth headers
+      ansible.builtin.set_fact:
+        __aap_headers: "{{ {'Content-Type': 'application/json'} | combine({'Authorization': 'Bearer ' ~ controller_token} if controller_token | length > 0 else {}) }}"
+        __aap_user: "{{ controller_username if controller_token | length == 0 else omit }}"
+        __aap_pass: "{{ controller_password if controller_token | length == 0 else omit }}"
+
+    - name: Look up the Lightwell workflow job template
+      ansible.builtin.uri:
+        url: "{{ __aap_base }}/api/controller/v2/workflow_job_templates/?name={{ workflow_name | urlencode }}"
+        method: GET
+        headers: "{{ __aap_headers }}"
+        url_username: "{{ __aap_user }}"
+        url_password: "{{ __aap_pass }}"
+        force_basic_auth: "{{ controller_token | length == 0 }}"
+        validate_certs: "{{ controller_verify | bool }}"
+      register: __wf
+
+    - name: Require the workflow to exist
+      ansible.builtin.assert:
+        that:
+          - __wf.json.results | default([]) | length > 0
+        fail_msg: "AAP workflow '{{ workflow_name }}' was not found"
+
+    - name: Launch the Lightwell workflow
+      ansible.builtin.uri:
+        url: "{{ __aap_base }}/api/controller/v2/workflow_job_templates/{{ __wf.json.results[0].id }}/launch/"
+        method: POST
+        headers: "{{ __aap_headers }}"
+        url_username: "{{ __aap_user }}"
+        url_password: "{{ __aap_pass }}"
+        force_basic_auth: "{{ controller_token | length == 0 }}"
+        validate_certs: "{{ controller_verify | bool }}"
+        body_format: json
+        body:
+          extra_vars:
+            advisory_id: "{{ advisory_id }}"
+            cve_id: "{{ cve_id }}"
+            severity: "{{ severity }}"
+            package_name: "{{ package_name }}"
+            patched_version: "{{ patched_version }}"
+            affected_app: "{{ affected_app }}"
+            target_app: "{{ affected_app }}"
+            lightwell_patch_available: "{{ lightwell_patch_available | bool }}"
+        status_code: [201]
+      register: __launch
+
+    - name: Wait for the workflow job to finish
+      ansible.builtin.uri:
+        url: "{{ __aap_base }}/api/controller/v2/workflow_jobs/{{ __launch.json.workflow_job | default(__launch.json.id) }}/"
+        method: GET
+        headers: "{{ __aap_headers }}"
+        url_username: "{{ __aap_user }}"
+        url_password: "{{ __aap_pass }}"
+        force_basic_auth: "{{ controller_token | length == 0 }}"
+        validate_certs: "{{ controller_verify | bool }}"
+      register: __job
+      until: __job.json.status in ['successful', 'failed', 'error', 'canceled']
+      retries: 60
+      delay: 5
+
+    - name: Show workflow job result
+      ansible.builtin.debug:
+        msg: "AAP workflow {{ workflow_name }} job {{ __job.json.id }} ended {{ __job.json.status }}"
+
+    - name: Fail this node if the AAP workflow failed
+      ansible.builtin.fail:
+        msg: "Lightwell AAP workflow ended with status {{ __job.json.status }}"
+      when: __job.json.status != "successful"
+
+    - name: Publish launch artifacts
+      ansible.builtin.set_stats:
+        data:
+          aap_workflow_job_id: "{{ __job.json.id }}"
+          aap_workflow_status: "{{ __job.json.status }}"
+        per_host: false

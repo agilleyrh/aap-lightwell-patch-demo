@@ -1,0 +1,9 @@
+{
+  "app": "checkout-service",
+  "language": "java",
+  "environment": "production",
+  "components": [
+    { "name": "org.springframework.boot:spring-boot-starter-web", "version": "3.3.4", "ecosystem": "maven" },
+    { "name": "org.apache.commons:commons-text", "version": "1.10.0", "ecosystem": "maven" }
+  ]
+}

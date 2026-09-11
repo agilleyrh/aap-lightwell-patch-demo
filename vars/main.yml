@@ -1,0 +1,25 @@
+---
+# Simulated application estate protected by Lightwell patches.
+# In production this would come from an SBOM inventory, ACS, or a CMDB.
+
+lightwell_work_dir: /tmp/lightwell-demo
+lightwell_catalog_dir: "{{ playbook_dir }}/../catalog"
+lightwell_apps_dir: "{{ playbook_dir }}/../apps"
+
+demo_apps:
+  payments-api:
+    name: payments-api
+    language: python
+    ecosystem: pypi
+    environments: [build, staging, production]
+    current_env: staging
+    sbom: "{{ playbook_dir }}/../apps/payments-api/sbom.json"
+    requirements: "{{ playbook_dir }}/../apps/payments-api/requirements.txt"
+  checkout-service:
+    name: checkout-service
+    language: java
+    ecosystem: maven
+    environments: [build, staging, production]
+    current_env: production
+    sbom: "{{ playbook_dir }}/../apps/checkout-service/sbom.json"
+    requirements: "{{ playbook_dir }}/../apps/checkout-service/pom.xml"

@@ -1,0 +1,124 @@
+---
+- name: Analyze Lightwell advisory against application SBOMs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../vars/main.yml"
+  vars:
+    lw_default_advisory_id: LW-2026-00412
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+        affected_app: "{{ affected_app | default('', true) }}"
+
+    - name: Resolve advisory file
+      ansible.builtin.set_fact:
+        __advisory_file: "{{ playbook_dir }}/../catalog/advisories/{{ advisory_id }}.yml"
+
+    - name: Stat the advisory file
+      ansible.builtin.stat:
+        path: "{{ __advisory_file }}"
+      register: __advisory_stat
+
+    - name: Fail when the advisory is unknown
+      ansible.builtin.assert:
+        that:
+          - __advisory_stat.stat.exists
+        fail_msg: >-
+          Advisory {{ advisory_id }} is not in the simulated Lightwell catalog.
+          Expected {{ __advisory_file }}.
+
+    - name: Load Lightwell advisory
+      ansible.builtin.include_vars:
+        file: "{{ __advisory_file }}"
+        name: advisory
+
+    - name: Load Lightwell Network catalog index
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../catalog/index.yml"
+        name: catalog
+
+    - name: Determine target application
+      ansible.builtin.set_fact:
+        target_app: "{{ affected_app | default(advisory.affected_apps[0], true) }}"
+
+    - name: Require the application to be in the demo estate
+      ansible.builtin.assert:
+        that:
+          - target_app in demo_apps
+        fail_msg: Application {{ target_app }} is not in vars/main.yml demo_apps
+
+    - name: Load application SBOM
+      ansible.builtin.slurp:
+        src: "{{ demo_apps[target_app].sbom }}"
+      register: __sbom_raw
+      when: target_app in demo_apps
+
+    - name: Parse application SBOM
+      ansible.builtin.set_fact:
+        app_sbom: "{{ __sbom_raw.content | b64decode | from_json }}"
+      when: __sbom_raw is not skipped
+
+    - name: Find the vulnerable component in the SBOM
+      ansible.builtin.set_fact:
+        installed_component: >-
+          {{ app_sbom.components
+             | selectattr('name', 'search', advisory.package_name.split(':')[-1])
+             | list
+             | first
+             | default({}) }}
+      when: app_sbom is defined
+
+    - name: Compose analysis result
+      ansible.builtin.set_fact:
+        analysis:
+          advisory_id: "{{ advisory.advisory_id }}"
+          cve_id: "{{ advisory.cve_id }}"
+          severity: "{{ advisory.severity }}"
+          cvss_score: "{{ advisory.cvss_score }}"
+          ecosystem: "{{ advisory.ecosystem }}"
+          package_name: "{{ advisory.package_name }}"
+          vulnerable_range: "{{ advisory.vulnerable_range }}"
+          patched_version: "{{ advisory.patched_version | default('none', true) }}"
+          lightwell_patch_available: "{{ advisory.lightwell_patch_available | bool }}"
+          recommended_action: "{{ advisory.recommended_action }}"
+          target_app: "{{ target_app }}"
+          app_environment: "{{ app_sbom.environment | default('unknown') }}"
+          installed_version: "{{ installed_component.version | default('not-installed') }}"
+          host_actually_affected: "{{ installed_component | length > 0 }}"
+          lightwell_repo: "{{ advisory.lightwell_repo | default('') }}"
+
+    - name: Show Lightwell triage
+      ansible.builtin.debug:
+        msg:
+          - "Lightwell advisory {{ analysis.advisory_id }} ({{ analysis.cve_id }})"
+          - "Severity {{ analysis.severity }} / CVSS {{ analysis.cvss_score }}"
+          - "App {{ analysis.target_app }} in {{ analysis.app_environment }} runs {{ analysis.package_name }} {{ analysis.installed_version }}"
+          - "Lightwell patch available: {{ analysis.lightwell_patch_available }} -> {{ analysis.patched_version }}"
+          - "Recommended action: {{ analysis.recommended_action }}"
+
+    - name: Publish artifacts for the rest of the workflow
+      ansible.builtin.set_stats:
+        data:
+          advisory_id: "{{ analysis.advisory_id }}"
+          cve_id: "{{ analysis.cve_id }}"
+          severity: "{{ analysis.severity }}"
+          package_name: "{{ analysis.package_name }}"
+          patched_version: "{{ analysis.patched_version }}"
+          lightwell_patch_available: "{{ analysis.lightwell_patch_available }}"
+          recommended_action: "{{ analysis.recommended_action }}"
+          target_app: "{{ analysis.target_app }}"
+          app_environment: "{{ analysis.app_environment }}"
+          installed_version: "{{ analysis.installed_version }}"
+          lightwell_repo: "{{ analysis.lightwell_repo }}"
+        per_host: false
+
+    - name: Stop the success path when Lightwell has no signed patch
+      ansible.builtin.fail:
+        msg: >-
+          No Lightwell Network patch is available for {{ analysis.advisory_id }}
+          ({{ analysis.cve_id }}) on {{ analysis.target_app }}.
+          Route this advisory to investigation instead of rebuild/promote.
+      when: not (analysis.lightwell_patch_available | bool)

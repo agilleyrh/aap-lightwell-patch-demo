@@ -1,0 +1,39 @@
+---
+- name: Lightwell advisory to AAP patch pipeline
+  hosts: all
+  sources:
+    - name: lightwell_advisories
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    - name: Launch AAP workflow when Lightwell has a signed patch
+      condition: >-
+        (event.payload.lightwell_patch_available is defined and event.payload.lightwell_patch_available) or
+        (event.lightwell_patch_available is defined and event.lightwell_patch_available)
+      actions:
+        - run_workflow_template:
+            name: Lightwell | Application Patch Pipeline
+            organization: Default
+            job_args:
+              extra_vars:
+                advisory_id: "{{ event.payload.advisory_id | default(event.advisory_id) }}"
+                cve_id: "{{ event.payload.cve_id | default(event.cve_id) | default('') }}"
+                severity: "{{ event.payload.severity | default(event.severity) | default('') }}"
+                package_name: "{{ event.payload.package_name | default(event.package_name) | default('') }}"
+                patched_version: "{{ event.payload.patched_version | default(event.patched_version) | default('') }}"
+                affected_app: "{{ event.payload.affected_app | default(event.affected_app) | default('') }}"
+                target_app: "{{ event.payload.affected_app | default(event.affected_app) | default('') }}"
+                lightwell_patch_available: true
+                source: eda-aap
+
+    - name: Ignore advisories that are not yet in Lightwell Network
+      condition: >-
+        (event.payload.advisory_id is defined or event.advisory_id is defined) and
+        not (
+          (event.payload.lightwell_patch_available is defined and event.payload.lightwell_patch_available) or
+          (event.lightwell_patch_available is defined and event.lightwell_patch_available)
+        )
+      actions:
+        - debug:
+            msg: "Lightwell advisory has no signed patch yet; AAP pipeline will not start"

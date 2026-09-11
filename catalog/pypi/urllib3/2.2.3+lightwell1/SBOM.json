@@ -1,0 +1,18 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "components": [
+    {
+      "type": "library",
+      "name": "urllib3",
+      "version": "2.2.3+lightwell1",
+      "purl": "pkg:pypi/urllib3@2.2.3%2Blightwell1",
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "properties": [
+        { "name": "lightwell:advisory", "value": "LW-2026-00412" },
+        { "name": "lightwell:cve", "value": "CVE-2026-55102" },
+        { "name": "lightwell:upstream-base", "value": "2.2.3" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+---
+# Simulated Red Hat / IBM Lightwell Network catalog.
+# Production systems consume cryptographically signed, backported
+# application-layer remediations from Lightwell Network instead of
+# forcing a major version upgrade.
+provider: Red Hat Lightwell Network (simulated)
+catalog_version: "2026.9"
+packages:
+  - ecosystem: pypi
+    name: urllib3
+    vulnerable_versions: ">=2.2.0,<=2.2.3"
+    patched_version: "2.2.3+lightwell1"
+    cve: CVE-2026-55102
+    advisory_id: LW-2026-00412
+    severity: Critical
+    cvss: 9.1
+    signed: true
+    path: pypi/urllib3/2.2.3+lightwell1
+  - ecosystem: maven
+    name: org.apache.commons:commons-text
+    vulnerable_versions: ">=1.10.0,<1.11.0"
+    patched_version: null
+    cve: CVE-2026-55118
+    advisory_id: LW-2026-00418
+    severity: Moderate
+    cvss: 5.4
+    signed: false
+    path: null
+    notes: Lightwell backport is still in the embargo window

@@ -1,0 +1,10 @@
+.DS_Store
+*.retry
+__pycache__/
+.venv/
+venv/
+work/
+.env
+*.pyc
+.idea/
+.vscode/

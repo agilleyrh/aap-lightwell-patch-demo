@@ -1,0 +1,22 @@
+---
+advisory_id: LW-2026-00418
+title: Apache Commons Text interpolation follow-on (no Lightwell patch yet)
+cve_id: CVE-2026-55118
+severity: Moderate
+cvss_score: 5.4
+cvss_vector: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:N
+ecosystem: maven
+package_name: org.apache.commons:commons-text
+vulnerable_range: ">=1.10.0,<1.11.0"
+patched_version: null
+lightwell_patch_available: false
+lightwell_repo: null
+upstream_fix_version: "1.12.0"
+reason_for_backport: >-
+  checkout-service is pinned to the 1.10 line. Lightwell Clearinghouse has
+  the embargoed fix but it is not yet in the Network catalog.
+published: "2026-09-11T08:15:00Z"
+source: lightwell-clearinghouse
+affected_apps:
+  - checkout-service
+recommended_action: investigate

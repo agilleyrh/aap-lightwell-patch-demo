@@ -1,0 +1,82 @@
+---
+- name: Test the rebuilt application against the Lightwell patch
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../vars/main.yml"
+  vars:
+    lw_default_advisory_id: LW-2026-00412
+    lw_default_app: payments-api
+    lw_default_nvr: "2.2.3+lightwell1"
+    lw_default_package: urllib3
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+        target_app: "{{ target_app | default(lw_default_app, true) }}"
+        patched_version: "{{ patched_version | default(lw_default_nvr, true) }}"
+        package_name: "{{ package_name | default(lw_default_package, true) }}"
+        artifact_path: "{{ artifact_path | default(lightwell_work_dir ~ '/builds/' ~ (target_app | default(lw_default_app, true)) ~ '/artifact.json', true) }}"
+
+    - name: Load build artifact
+      ansible.builtin.slurp:
+        src: "{{ artifact_path }}"
+      register: __artifact
+
+    - name: Load patched SBOM
+      ansible.builtin.slurp:
+        src: "{{ lightwell_work_dir }}/builds/{{ target_app }}/sbom.json"
+      register: __sbom
+
+    - name: Parse test inputs
+      ansible.builtin.set_fact:
+        lw_artifact: "{{ __artifact.content | b64decode | from_json }}"
+        patched_sbom: "{{ __sbom.content | b64decode | from_json }}"
+
+    - name: Assert the artifact was rebuilt for this advisory
+      ansible.builtin.assert:
+        that:
+          - lw_artifact.advisory_id == advisory_id
+          - lw_artifact.status == "rebuilt"
+          - patched_sbom.components | selectattr('lightwell', 'defined') | list | length > 0
+          - patched_version in (lw_artifact.patched_dependency | default(''))
+        fail_msg: Build artifact for {{ target_app }} did not consume the Lightwell patch
+
+    - name: Simulate unit and smoke tests
+      ansible.builtin.debug:
+        msg:
+          - "SBOM test: {{ package_name }} is {{ patched_version }} (Lightwell signed)"
+          - "API compatibility test: backport keeps the {{ patched_version.split('+')[0] }} API"
+          - "Smoke test: {{ lw_artifact.image }} starts and serves /health"
+          - "Regression test: CVE {{ cve_id | default('CVE-2026-55102') }} marker absent"
+
+    - name: Compose test report
+      ansible.builtin.set_fact:
+        lw_test_report:
+          app: "{{ target_app }}"
+          advisory_id: "{{ advisory_id }}"
+          image: "{{ lw_artifact.image }}"
+          tests:
+            sbom_contains_lightwell_nvr: passed
+            api_compatibility: passed
+            health_endpoint: passed
+            cve_marker_absent: passed
+          result: passed
+
+    - name: Record a passing test report
+      ansible.builtin.copy:
+        dest: "{{ lightwell_work_dir }}/builds/{{ target_app }}/test-report.json"
+        mode: "0644"
+        content: "{{ lw_test_report | to_nice_json }}\n"
+
+    - name: Show test result
+      ansible.builtin.debug:
+        msg: "All tests passed for {{ lw_artifact.image }}. Safe to promote."
+
+    - name: Publish test artifacts
+      ansible.builtin.set_stats:
+        data:
+          test_result: passed
+          test_report: "{{ lightwell_work_dir }}/builds/{{ target_app }}/test-report.json"
+        per_host: false

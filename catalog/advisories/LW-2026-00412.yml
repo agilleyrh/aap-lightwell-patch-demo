@@ -1,0 +1,23 @@
+---
+advisory_id: LW-2026-00412
+title: urllib3 TLS certificate hostname bypass (surgical Lightwell backport)
+cve_id: CVE-2026-55102
+severity: Critical
+cvss_score: 9.1
+cvss_vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+ecosystem: pypi
+package_name: urllib3
+vulnerable_range: ">=2.2.0,<=2.2.3"
+patched_version: "2.2.3+lightwell1"
+lightwell_patch_available: true
+lightwell_repo: lightwell-network/pypi/urllib3
+upstream_fix_version: "2.3.0"
+reason_for_backport: >-
+  payments-api cannot consume urllib3 2.3.x without a breaking httpx upgrade.
+  Lightwell backports the hostname verification fix onto the 2.2.3 API the
+  application already runs.
+published: "2026-09-11T08:00:00Z"
+source: lightwell-clearinghouse
+affected_apps:
+  - payments-api
+recommended_action: apply_now

@@ -1,0 +1,10 @@
+{
+  "app": "payments-api",
+  "language": "python",
+  "environment": "staging",
+  "components": [
+    { "name": "flask", "version": "3.0.3", "ecosystem": "pypi" },
+    { "name": "urllib3", "version": "2.2.3", "ecosystem": "pypi", "purl": "pkg:pypi/urllib3@2.2.3" },
+    { "name": "httpx", "version": "0.27.2", "ecosystem": "pypi" }
+  ]
+}

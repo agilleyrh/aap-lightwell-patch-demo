@@ -1,0 +1,6 @@
+-----BEGIN LIGHTWELL SIGNATURE-----
+advisory: LW-2026-00412
+package: urllib3==2.2.3+lightwell1
+issuer: Red Hat Lightwell Network (simulated)
+status: VALID
+-----END LIGHTWELL SIGNATURE-----

@@ -1,0 +1,31 @@
+---
+- name: Lightwell advisory to Automation Orchestrator
+  hosts: all
+  sources:
+    - name: lightwell_advisories
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    - name: Forward every Lightwell advisory to Automation Orchestrator
+      condition: event.payload.advisory_id is defined or event.advisory_id is defined
+      actions:
+        - run_job_template:
+            name: Lightwell | Post AO Webhook
+            organization: Default
+            job_args:
+              extra_vars:
+                advisory_id: "{{ event.payload.advisory_id | default(event.advisory_id) }}"
+                cve_id: "{{ event.payload.cve_id | default(event.cve_id) | default('') }}"
+                severity: "{{ event.payload.severity | default(event.severity) | default('') }}"
+                package_name: "{{ event.payload.package_name | default(event.package_name) | default('') }}"
+                patched_version: "{{ event.payload.patched_version | default(event.patched_version) | default('') }}"
+                affected_app: "{{ event.payload.affected_app | default(event.affected_app) | default('') }}"
+                target_app: "{{ event.payload.affected_app | default(event.affected_app) | default('') }}"
+                lightwell_patch_available: "{{ event.payload.lightwell_patch_available | default(event.lightwell_patch_available) | default(false) }}"
+                source: eda-ao
+                ao_webhook_url: "{{ ao_webhook_url }}"
+                ao_webhook_validate_certs: "{{ ao_webhook_validate_certs | default(false) }}"
+                ao_webhook_client_id: "{{ ao_webhook_client_id | default('') }}"
+                ao_webhook_client_secret: "{{ ao_webhook_client_secret | default('') }}"
+                ao_access_token: "{{ ao_access_token | default('') }}"

@@ -1,0 +1,13 @@
+{
+  "name": "urllib3",
+  "version": "2.2.3+lightwell1",
+  "ecosystem": "pypi",
+  "advisory_id": "LW-2026-00412",
+  "cve_id": "CVE-2026-55102",
+  "upstream_base": "2.2.3",
+  "lightwell_patchset": "hostname-verification-backport",
+  "signed_by": "Red Hat Lightwell Network (simulated)",
+  "signature": "LW1-SIMULATED-SIGNATURE-2026-00412",
+  "sbom_present": true,
+  "api_compatible_with": "2.2.3"
+}

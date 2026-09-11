@@ -1,0 +1,82 @@
+---
+- name: POST a Lightwell advisory to an Automation Orchestrator webhook
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    lw_default_advisory_id: LW-2026-00412
+    lw_default_cve: CVE-2026-55102
+    lw_default_severity: Critical
+    lw_default_package: urllib3
+    lw_default_nvr: "2.2.3+lightwell1"
+    lw_default_app: payments-api
+    lw_default_source: eda-event-stream
+  tasks:
+    - name: Apply extra-var defaults
+      ansible.builtin.set_fact:
+        ao_webhook_url: "{{ ao_webhook_url | default('', true) }}"
+        ao_webhook_validate_certs: "{{ ao_webhook_validate_certs | default(false) | bool }}"
+        ao_webhook_client_id: "{{ ao_webhook_client_id | default('', true) }}"
+        ao_webhook_client_secret: "{{ ao_webhook_client_secret | default('', true) }}"
+        ao_access_token: "{{ ao_access_token | default('', true) }}"
+        advisory_id: "{{ advisory_id | default(lw_default_advisory_id, true) }}"
+        cve_id: "{{ cve_id | default(lw_default_cve, true) }}"
+        severity: "{{ severity | default(lw_default_severity, true) }}"
+        package_name: "{{ package_name | default(lw_default_package, true) }}"
+        patched_version: "{{ patched_version | default(lw_default_nvr, true) }}"
+        affected_app: "{{ affected_app | default(target_app | default(lw_default_app, true), true) }}"
+        lightwell_patch_available: "{{ lightwell_patch_available | default(true) }}"
+        source: "{{ source | default(lw_default_source, true) }}"
+
+    - name: Require a webhook URL
+      ansible.builtin.assert:
+        that:
+          - ao_webhook_url | length > 0
+        fail_msg: ao_webhook_url is required (Automation Orchestrator webhook trigger URL)
+
+    - name: Derive the AO token endpoint from the webhook URL
+      ansible.builtin.set_fact:
+        ao_token_url: "{{ ao_webhook_url | regex_replace('/api/v1/.*$', '/api/v1/auth/token') }}"
+      when: ao_access_token | length == 0 and ao_webhook_client_id | length > 0
+
+    - name: Exchange service-account credentials for an AO token
+      ansible.builtin.uri:
+        url: "{{ ao_token_url }}"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: client_credentials
+          client_id: "{{ ao_webhook_client_id }}"
+          client_secret: "{{ ao_webhook_client_secret }}"
+        validate_certs: "{{ ao_webhook_validate_certs }}"
+        status_code: [200]
+      register: __ao_token
+      no_log: true
+      when: ao_access_token | length == 0 and ao_webhook_client_id | length > 0
+
+    - name: Select the bearer token
+      ansible.builtin.set_fact:
+        __token: "{{ ao_access_token if ao_access_token | length > 0 else (__ao_token.json.access_token | default('')) }}"
+
+    - name: POST the Lightwell advisory to Automation Orchestrator
+      ansible.builtin.uri:
+        url: "{{ ao_webhook_url }}"
+        method: POST
+        headers: "{{ {'Content-Type': 'application/json'} | combine({'Authorization': 'Bearer ' ~ __token} if __token | length > 0 else {}) }}"
+        body_format: json
+        body:
+          advisory_id: "{{ advisory_id }}"
+          cve_id: "{{ cve_id }}"
+          severity: "{{ severity }}"
+          package_name: "{{ package_name }}"
+          patched_version: "{{ patched_version }}"
+          affected_app: "{{ affected_app }}"
+          lightwell_patch_available: "{{ lightwell_patch_available | bool }}"
+          source: "{{ source }}"
+        validate_certs: "{{ ao_webhook_validate_certs }}"
+        status_code: [200, 202]
+      register: __ao_post
+
+    - name: Show AO webhook response
+      ansible.builtin.debug:
+        msg: "Automation Orchestrator accepted Lightwell advisory {{ advisory_id }} (HTTP {{ __ao_post.status }})"
