@@ -554,22 +554,21 @@ def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str
         workflow_id = created["id"]
         print(f"  created AO workflow: {document['name']}")
 
-    versions = ao_items(ao.request(f"/api/v1/workflows/{workflow_id}/versions?limit=5"))
-    version = versions[0] if versions else None
+    versions = ao_items(ao.request(f"/api/v1/workflows/{workflow_id}/versions?limit=10"))
+    version = max(versions, key=lambda item: item.get("version") or 0) if versions else None
     published = False
     if version:
         version_number = version.get("version", 1)
-        for path in (
-            f"/api/v1/workflows/{workflow_id}/versions/{version_number}/publish",
-            f"/api/v1/workflows/{workflow_id}/versions/{version['id']}/publish",
-        ):
-            try:
-                ao.request(path, "POST", {"change_description": "Publish Lightwell demo"})
-                published = True
-                print("  published AO workflow")
-                break
-            except RuntimeError:
-                continue
+        try:
+            ao.request(
+                f"/api/v1/workflows/{workflow_id}/versions/{version_number}/publish",
+                "POST",
+                {"change_description": "Publish Lightwell demo"},
+            )
+            published = True
+            print(f"  published AO workflow version {version_number}")
+        except RuntimeError as exc:
+            print(f"  warning: AO publish skipped: {exc}")
     webhook_url = f"https://{host}/api/v1/webhooks/lightwell-advisory"
     return {
         "workflow_id": workflow_id,
