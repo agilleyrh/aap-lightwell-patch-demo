@@ -75,7 +75,7 @@
           app: "{{ target_app }}"
           advisory_id: "{{ advisory_id }}"
           built_at: "{{ now(utc=true).isoformat() }}"
-          environment: build
+          runtime_env: build
           components:
             - name: "{{ package_name }}"
               version: "{{ patched_version }}"
@@ -118,4 +118,6 @@
           artifact_path: "{{ lightwell_work_dir }}/builds/{{ target_app }}/artifact.json"
           image_tag: "{{ target_app }}:{{ advisory_id | lower }}"
           rebuild_status: rebuilt
+          lw_artifact: "{{ lw_build_artifact }}"
+          lw_patched_sbom: "{{ lw_patched_sbom }}"
         per_host: false

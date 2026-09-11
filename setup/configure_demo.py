@@ -281,7 +281,7 @@ def provision_controller(api: API, project_url: str, project_branch: str) -> dic
             "inventory": inventory["id"],
             "ask_variables_on_launch": True,
             "allow_simultaneous": True,
-            "extra_vars": extra_vars,
+            "extra_vars": json.dumps(extra_vars),
         },
     )
     delete_workflow_nodes(api, workflow["id"])
@@ -437,7 +437,11 @@ def provision_eda(api: API, controller: dict[str, Any], project_url: str, projec
         tokens = api.request("/api/eda/v1/users/me/awx-tokens/")
         token_row = next((item for item in tokens.get("results", []) if item.get("name") == "lightwell-demo"), None)
         if not token_row:
-            token_row = api.request("/api/eda/v1/users/me/awx-tokens/", "POST", {"name": "lightwell-demo"})
+            token_row = api.request(
+                "/api/eda/v1/users/me/awx-tokens/",
+                "POST",
+                {"name": "lightwell-demo", "token": aap_token},
+            )
             print("  created EDA controller token lightwell-demo")
         result["awx_token_id"] = token_row["id"]
     except RuntimeError as exc:
@@ -445,12 +449,15 @@ def provision_eda(api: API, controller: dict[str, Any], project_url: str, projec
 
     aap_rulebook = next((item for name, item in by_name.items() if "aap-pipeline" in name), None)
     if aap_rulebook and result.get("decision_environment_id") and result.get("awx_token_id"):
+        sources = api.request(f"/api/eda/v1/rulebooks/{aap_rulebook['id']}/sources/")
+        source = next((item for item in sources.get("results", []) if item.get("name") == "lightwell_advisories"), {})
         mappings = json.dumps(
             [
                 {
                     "source_name": "lightwell_advisories",
                     "event_stream_id": stream["id"],
                     "event_stream_name": stream["name"],
+                    "rulebook_hash": source.get("rulebook_hash", ""),
                 }
             ]
         )
@@ -551,9 +558,10 @@ def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str
     version = versions[0] if versions else None
     published = False
     if version:
+        version_number = version.get("version", 1)
         for path in (
+            f"/api/v1/workflows/{workflow_id}/versions/{version_number}/publish",
             f"/api/v1/workflows/{workflow_id}/versions/{version['id']}/publish",
-            f"/api/v1/workflows/{workflow_id}/publish",
         ):
             try:
                 ao.request(path, "POST", {"change_description": "Publish Lightwell demo"})

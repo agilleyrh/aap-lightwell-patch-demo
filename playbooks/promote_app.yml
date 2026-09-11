@@ -19,6 +19,24 @@
         test_result: "{{ test_result | default(lw_default_test_result, true) }}"
         promote_to: "{{ promote_to | default(lw_default_promote_to, true) }}"
 
+    - name: Coerce workflow artifact extra vars
+      ansible.builtin.set_fact:
+        lw_artifact: "{{ lw_artifact | from_json }}"
+      when: lw_artifact is defined and lw_artifact is string
+
+    - name: Ensure the build directory exists
+      ansible.builtin.file:
+        path: "{{ lightwell_work_dir }}/builds/{{ target_app }}"
+        state: directory
+        mode: "0755"
+
+    - name: Restore artifact from the previous workflow node
+      ansible.builtin.copy:
+        dest: "{{ artifact_path }}"
+        mode: "0644"
+        content: "{{ lw_artifact | to_nice_json }}\n"
+      when: lw_artifact is defined and lw_artifact is mapping
+
     - name: Refuse promotion when tests did not pass
       ansible.builtin.assert:
         that:

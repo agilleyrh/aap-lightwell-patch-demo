@@ -19,6 +19,36 @@
         package_name: "{{ package_name | default(lw_default_package, true) }}"
         artifact_path: "{{ artifact_path | default(lightwell_work_dir ~ '/builds/' ~ (target_app | default(lw_default_app, true)) ~ '/artifact.json', true) }}"
 
+    - name: Coerce workflow artifact extra vars
+      ansible.builtin.set_fact:
+        lw_artifact: "{{ lw_artifact | from_json }}"
+      when: lw_artifact is defined and lw_artifact is string
+
+    - name: Coerce workflow SBOM extra vars
+      ansible.builtin.set_fact:
+        lw_patched_sbom: "{{ lw_patched_sbom | from_json }}"
+      when: lw_patched_sbom is defined and lw_patched_sbom is string
+
+    - name: Ensure the build directory exists
+      ansible.builtin.file:
+        path: "{{ lightwell_work_dir }}/builds/{{ target_app }}"
+        state: directory
+        mode: "0755"
+
+    - name: Restore artifact from the previous workflow node
+      ansible.builtin.copy:
+        dest: "{{ artifact_path }}"
+        mode: "0644"
+        content: "{{ lw_artifact | to_nice_json }}\n"
+      when: lw_artifact is defined and lw_artifact is mapping
+
+    - name: Restore SBOM from the previous workflow node
+      ansible.builtin.copy:
+        dest: "{{ lightwell_work_dir }}/builds/{{ target_app }}/sbom.json"
+        mode: "0644"
+        content: "{{ lw_patched_sbom | to_nice_json }}\n"
+      when: lw_patched_sbom is defined and lw_patched_sbom is mapping
+
     - name: Load build artifact
       ansible.builtin.slurp:
         src: "{{ artifact_path }}"
