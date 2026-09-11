@@ -95,6 +95,18 @@ Enable the EDA activation when you want Demo 1 live (it starts another pod):
 LIGHTWELL_ENABLE_EDA=1 python3 setup/configure_demo.py
 ```
 
+On this `aap-demo` cluster the setup has already been applied:
+
+| Resource | Name / URL |
+|---|---|
+| AAP project | `Lightwell Patch Demo` |
+| AAP workflow | `Lightwell \| Application Patch Pipeline` |
+| EDA event stream | `Lightwell AAP Demo` |
+| EDA activation | `Lightwell AAP Pipeline` (created **disabled** so it does not consume extra pods) |
+| AO workflow | `Lightwell Intelligent Patch Pipeline` (published and enabled) |
+
+Verified on Controller: apply path workflow job **145** (all nodes successful) and investigate path job **159** (analyze failed as designed → notify-investigate).
+
 ## Run the demos
 
 **AAP workflow only** (always works, good smoke test):
