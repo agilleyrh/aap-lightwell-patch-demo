@@ -4,7 +4,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 EVENT="${1:-$ROOT/events/lightwell-critical-advisory.json}"
 AO_HOST="${AO_HOST:-$(kubectl get route automation-orchestrator -n automation-orchestrator -o jsonpath='{.spec.host}' 2>/dev/null || true)}"
 AO_PASSWORD="${AO_PASSWORD:-$(kubectl get secret automation-orchestrator-initial-admin-password -n automation-orchestrator -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)}"
-WEBHOOK_URL="${AO_WEBHOOK_URL:-https://${AO_HOST}/api/v1/webhooks/lightwell-advisory}"
+
+case "$(basename "${EVENT}")" in
+  lightwell-prod-approval.json) WEBHOOK_PATH="lightwell-prod-approval" ;;
+  lightwell-investigate.json) WEBHOOK_PATH="lightwell-investigate" ;;
+  *) WEBHOOK_PATH="lightwell-auto-apply" ;;
+esac
+WEBHOOK_URL="${AO_WEBHOOK_URL:-https://${AO_HOST}/api/v1/webhooks/${WEBHOOK_PATH}}"
 
 TOKEN="$(curl -sk -X POST "https://${AO_HOST}/api/v1/auth/login" \
   -H "Content-Type: application/json" \

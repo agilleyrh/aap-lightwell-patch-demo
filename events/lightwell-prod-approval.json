@@ -1,0 +1,17 @@
+{
+  "source": "lightwell-clearinghouse",
+  "advisory_id": "LW-2026-00412",
+  "cve_id": "CVE-2026-55102",
+  "title": "urllib3 TLS certificate hostname bypass",
+  "severity": "Critical",
+  "cvss_score": 9.1,
+  "ecosystem": "pypi",
+  "package_name": "urllib3",
+  "installed_version": "2.2.3",
+  "patched_version": "2.2.3+lightwell1",
+  "lightwell_patch_available": true,
+  "lightwell_repo": "lightwell-network/pypi/urllib3",
+  "affected_app": "payments-api",
+  "environment": "production",
+  "recommended_action": "approved_patch"
+}

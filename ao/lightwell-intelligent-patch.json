@@ -45,6 +45,11 @@
               "default": "payments-api",
               "description": "Application from the estate SBOM (payments-api or checkout-service)"
             },
+            "environment": {
+              "type": "string",
+              "default": "staging",
+              "description": "App environment from the estate SBOM (staging, production, …)"
+            },
             "lightwell_patch_available": {
               "type": "boolean",
               "default": true,
@@ -77,7 +82,7 @@
       "type": "agentic",
       "name": "Analyze Lightwell Alert",
       "parameters": {
-        "prompt": "You are a Lightwell patch coordinator for Ansible Automation Platform.\n\nA Red Hat / IBM Lightwell advisory has arrived. The firing trigger (manual form or webhook) exposes these fields:\n- advisory_id: ${trigger.advisory_id}\n- cve_id: ${trigger.cve_id}\n- severity: ${trigger.severity}\n- package_name: ${trigger.package_name}\n- patched_version: ${trigger.patched_version}\n- affected_app: ${trigger.affected_app}\n- lightwell_patch_available: ${trigger.lightwell_patch_available}\n\nLightwell is NOT a RHEL errata feed. It publishes surgically backported, digitally signed application-layer dependencies (PyPI, Maven, npm) so production apps do not have to take a breaking major upgrade.\n\nYour job:\n1. Extract advisory_id, cve_id, severity, package_name, patched_version, affected_app, and lightwell_patch_available from those trigger fields.\n2. Use AAP MCP tools if they are available: list job templates and workflow job templates and confirm that 'Lightwell | Application Patch Pipeline' exists in organization Default. Also list inventories and note Demo Inventory.\n3. Decide a single route:\n   - apply_now: lightwell_patch_available is true AND the app environment is not production (staging/dev/build can auto-apply)\n   - approved_patch: lightwell_patch_available is true AND the app is production (human approval required)\n   - investigate: lightwell_patch_available is false, the app is not in the SBOM estate, or the package cannot be identified\n\nIf environment is not stated, treat payments-api as staging and checkout-service as production.\n\nThe JSON MUST have a top-level key named route. Do not wrap the object in final or any other key.\n\nOutput ONLY valid JSON:\n{\n  \"route\": \"apply_now or approved_patch or investigate\",\n  \"advisory_id\": \"\",\n  \"cve_id\": \"\",\n  \"severity\": \"\",\n  \"package_name\": \"\",\n  \"patched_version\": \"\",\n  \"affected_app\": \"\",\n  \"lightwell_patch_available\": false,\n  \"aap_workflow_name\": \"Lightwell | Application Patch Pipeline\",\n  \"confidence\": 0.0,\n  \"reasoning\": \"one or two sentences\"\n}",
+        "prompt": "You are a Lightwell patch coordinator for Ansible Automation Platform.\n\nA Red Hat / IBM Lightwell advisory has arrived. The firing trigger (manual form or webhook) exposes these fields:\n- advisory_id: ${trigger.advisory_id}\n- cve_id: ${trigger.cve_id}\n- severity: ${trigger.severity}\n- package_name: ${trigger.package_name}\n- patched_version: ${trigger.patched_version}\n- affected_app: ${trigger.affected_app}\n- environment: ${trigger.environment}\n- lightwell_patch_available: ${trigger.lightwell_patch_available}\n\nLightwell is NOT a RHEL errata feed. It publishes surgically backported, digitally signed application-layer dependencies (PyPI, Maven, npm) so production apps do not have to take a breaking major upgrade.\n\nYour job:\n1. Extract advisory_id, cve_id, severity, package_name, patched_version, affected_app, environment, and lightwell_patch_available from those trigger fields.\n2. Use AAP MCP tools if they are available: list job templates and workflow job templates and confirm that 'Lightwell | Application Patch Pipeline' exists in organization Default. Also list inventories and note Demo Inventory.\n3. Decide a single route:\n   - apply_now: lightwell_patch_available is true AND the app environment is not production (staging/dev/build can auto-apply)\n   - approved_patch: lightwell_patch_available is true AND the app is production (human approval required)\n   - investigate: lightwell_patch_available is false, the app is not in the SBOM estate, or the package cannot be identified\n\nIf environment is not stated, treat payments-api as staging and checkout-service as production.\n\nThe JSON MUST have a top-level key named route. Do not wrap the object in final or any other key.\n\nOutput ONLY valid JSON:\n{\n  \"route\": \"apply_now or approved_patch or investigate\",\n  \"advisory_id\": \"\",\n  \"cve_id\": \"\",\n  \"severity\": \"\",\n  \"package_name\": \"\",\n  \"patched_version\": \"\",\n  \"affected_app\": \"\",\n  \"environment\": \"\",\n  \"lightwell_patch_available\": false,\n  \"aap_workflow_name\": \"Lightwell | Application Patch Pipeline\",\n  \"confidence\": 0.0,\n  \"reasoning\": \"one or two sentences\"\n}",
         "responseSchema": {
           "type": "object",
           "required": ["route"],
@@ -101,6 +106,9 @@
               "type": "string"
             },
             "affected_app": {
+              "type": "string"
+            },
+            "environment": {
               "type": "string"
             },
             "lightwell_patch_available": {
@@ -169,6 +177,7 @@
           "patched_version": "${trigger.patched_version}",
           "affected_app": "${trigger.affected_app}",
           "target_app": "${trigger.affected_app}",
+          "environment": "${trigger.environment}",
           "lightwell_patch_available": "${trigger.lightwell_patch_available}"
         }
       },
@@ -203,6 +212,7 @@
           "patched_version": "${trigger.patched_version}",
           "affected_app": "${trigger.affected_app}",
           "target_app": "${trigger.affected_app}",
+          "environment": "${trigger.environment}",
           "lightwell_patch_available": "${trigger.lightwell_patch_available}"
         }
       },

@@ -13,12 +13,84 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AO_WORKFLOW_FILE = REPO_ROOT / "ao" / "lightwell-intelligent-patch.json"
+
+# Three published AO workflows share the same graph. Each bakes in trigger
+# defaults and pins the switch so a live demo does not require editing the form
+# or relying on the LLM to pick the path.
+AO_DEMO_WORKFLOWS = [
+    {
+        "name": "Lightwell Auto-apply (non-prod)",
+        "description": (
+            "Demo path: signed urllib3 backport on staging payments-api. "
+            "Start this workflow as-is — defaults already match Auto-apply."
+        ),
+        "webhook_path": "lightwell-auto-apply",
+        "force_route": "apply_now",
+        "switch_port": "case_0",
+        "manual_trigger_name": "Staging urllib3 advisory",
+        "defaults": {
+            "advisory_id": "LW-2026-00412",
+            "cve_id": "CVE-2026-55102",
+            "severity": "Critical",
+            "package_name": "urllib3",
+            "patched_version": "2.2.3+lightwell1",
+            "affected_app": "payments-api",
+            "environment": "staging",
+            "lightwell_patch_available": True,
+        },
+    },
+    {
+        "name": "Lightwell Approval (prod)",
+        "description": (
+            "Demo path: same signed urllib3 backport, payments-api in production. "
+            "Analyze then waits on Approve Production Lightwell Patch. "
+            "Start this workflow as-is — do not change the form."
+        ),
+        "webhook_path": "lightwell-prod-approval",
+        "force_route": "approved_patch",
+        "switch_port": "case_1",
+        "manual_trigger_name": "Production urllib3 advisory",
+        "defaults": {
+            "advisory_id": "LW-2026-00412",
+            "cve_id": "CVE-2026-55102",
+            "severity": "Critical",
+            "package_name": "urllib3",
+            "patched_version": "2.2.3+lightwell1",
+            "affected_app": "payments-api",
+            "environment": "production",
+            "lightwell_patch_available": True,
+        },
+    },
+    {
+        "name": "Lightwell Investigate",
+        "description": (
+            "Demo path: commons-text on production checkout-service with no "
+            "Lightwell Network backport yet. Analyze then Investigate agent. "
+            "Start this workflow as-is — do not change the form."
+        ),
+        "webhook_path": "lightwell-investigate",
+        "force_route": "investigate",
+        "switch_port": "case_2",
+        "manual_trigger_name": "Checkout-service advisory (no patch)",
+        "defaults": {
+            "advisory_id": "LW-2026-00418",
+            "cve_id": "CVE-2026-55118",
+            "severity": "Moderate",
+            "package_name": "org.apache.commons:commons-text",
+            "patched_version": "",
+            "affected_app": "checkout-service",
+            "environment": "production",
+            "lightwell_patch_available": False,
+        },
+    },
+]
 
 PROJECT_NAME = "Lightwell Patch Demo"
 PROJECT_URL_DEFAULT = "https://github.com/agilleyrh/aap-lightwell-patch-demo.git"
@@ -554,6 +626,126 @@ def resolve_ao_agent_llm(
     return {"credential_id": cred["id"], "llm_model_id": model_id}
 
 
+def bind_ao_runtime(
+    document: dict[str, Any],
+    aap_cred: dict[str, Any],
+    aap_int: dict[str, Any],
+    agent_llm: dict[str, str] | None,
+) -> None:
+    for node in document.get("nodes", []):
+        if node.get("type") == "aap_job_template":
+            node.setdefault("parameters", {})
+            node["parameters"]["credential_id"] = aap_cred["id"]
+            node["parameters"]["integration_id"] = aap_int["id"]
+        if node.get("type") == "agentic":
+            node.setdefault("parameters", {})
+            node["parameters"]["tool_selection_strategy"] = "NONE"
+            node["parameters"].pop("integration_connections", None)
+            node["parameters"].pop("tool_selections", None)
+            if agent_llm:
+                node["parameters"]["credential_id"] = agent_llm["credential_id"]
+                node["parameters"]["llm_model_id"] = agent_llm["llm_model_id"]
+            else:
+                node["parameters"].pop("credential_id", None)
+                node["parameters"].pop("llm_model_id", None)
+
+
+def build_ao_demo_workflow(base: dict[str, Any], scenario: dict[str, Any]) -> dict[str, Any]:
+    """Copy the shared graph and pin one demo path (defaults + switch + agent)."""
+    document = deepcopy(base)
+    document["name"] = scenario["name"]
+    document["description"] = scenario["description"]
+    force_route = scenario["force_route"]
+    demo_note = (
+        f"\n\nDEMO WORKFLOW: {scenario['name']}. "
+        f"The trigger defaults already represent this scenario. "
+        f'You MUST set "route" to "{force_route}". Do not choose a different route.'
+    )
+    for trigger in document.get("triggers", []):
+        if trigger.get("type") == "manual_trigger":
+            trigger["name"] = scenario["manual_trigger_name"]
+            schema = trigger.setdefault("parameters", {}).setdefault("input_schema", {})
+            props = schema.setdefault("properties", {})
+            for key, value in scenario["defaults"].items():
+                props.setdefault(key, {"type": "boolean" if isinstance(value, bool) else "string"})
+                props[key]["default"] = value
+        if trigger.get("type") == "webhook_trigger":
+            trigger.setdefault("parameters", {})["webhook_path"] = scenario["webhook_path"]
+    for node in document.get("nodes", []):
+        if node.get("id") == "analyze_agent":
+            prompt = node.setdefault("parameters", {}).get("prompt") or ""
+            if "DEMO WORKFLOW:" not in prompt:
+                node["parameters"]["prompt"] = prompt + demo_note
+        if node.get("id") == "route_switch":
+            # AO interpolates unanchored quoted names as ${'name'} activity refs.
+            # Bare true/false is also treated as a step name. Pin using the same
+            # `'key' in ${analyze_agent.result.content}` shape as the real routes.
+            for case in node.setdefault("parameters", {}).get("cases", []):
+                if case.get("port") == scenario["switch_port"]:
+                    case["condition"] = "'route' in ${analyze_agent.result.content}"
+                else:
+                    case["condition"] = "'__lightwell_skip__' in ${analyze_agent.result.content}"
+    return document
+
+
+def upsert_ao_workflow(
+    ao: API,
+    project_id: str,
+    document: dict[str, Any],
+    existing: list[dict[str, Any]],
+) -> dict[str, Any]:
+    current = next((item for item in existing if item.get("name") == document["name"]), None)
+    labels = {
+        "source": "agilleyrh/aap-lightwell-patch-demo",
+        "demo": "lightwell",
+        "path": document["name"],
+    }
+    if current:
+        ao.request(
+            f"/api/v1/workflows/{current['id']}",
+            "PATCH",
+            {
+                "description": document.get("description"),
+                "labels": labels,
+                "workflow_definition": document,
+                "change_description": f"Updated {document['name']}",
+            },
+        )
+        workflow_id = current["id"]
+        print(f"  updated AO workflow: {document['name']}")
+    else:
+        created = ao.request(
+            "/api/v1/workflows",
+            "POST",
+            {
+                "name": document["name"],
+                "description": document.get("description"),
+                "labels": labels,
+                "workflow_definition": document,
+                "project_id": project_id,
+            },
+        )
+        workflow_id = created["id"]
+        print(f"  created AO workflow: {document['name']}")
+
+    versions = ao_items(ao.request(f"/api/v1/workflows/{workflow_id}/versions?limit=10"))
+    version = max(versions, key=lambda item: item.get("version") or 0) if versions else None
+    published = False
+    if version:
+        version_number = version.get("version", 1)
+        try:
+            ao.request(
+                f"/api/v1/workflows/{workflow_id}/versions/{version_number}/publish",
+                "POST",
+                {"change_description": f"Publish {document['name']}"},
+            )
+            published = True
+            print(f"  published AO workflow version {version_number}: {document['name']}")
+        except RuntimeError as exc:
+            print(f"  warning: AO publish skipped for {document['name']}: {exc}")
+    return {"id": workflow_id, "name": document["name"], "published": published}
+
+
 def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str, Any]:
     print("Configuring Automation Orchestrator")
     login = API(f"https://{host}").request("/api/v1/auth/login", "POST", {"username": "admin", "password": password})
@@ -577,72 +769,22 @@ def provision_ao(host: str, password: str, aap_info: dict[str, Any]) -> dict[str
     if agent_llm is None:
         print("  warning: no LLM Provider credential found; agent nodes will fail until one is attached")
 
-    document = json.loads(AO_WORKFLOW_FILE.read_text())
-    for node in document.get("nodes", []):
-        if node.get("type") == "aap_job_template":
-            node.setdefault("parameters", {})
-            node["parameters"]["credential_id"] = aap_cred["id"]
-            node["parameters"]["integration_id"] = aap_int["id"]
-        if node.get("type") == "agentic":
-            node.setdefault("parameters", {})
-            node["parameters"]["tool_selection_strategy"] = "NONE"
-            node["parameters"].pop("integration_connections", None)
-            node["parameters"].pop("tool_selections", None)
-            if agent_llm:
-                node["parameters"]["credential_id"] = agent_llm["credential_id"]
-                node["parameters"]["llm_model_id"] = agent_llm["llm_model_id"]
-            else:
-                node["parameters"].pop("credential_id", None)
-                node["parameters"].pop("llm_model_id", None)
-
+    base = json.loads(AO_WORKFLOW_FILE.read_text())
     existing = ao_items(ao.request("/api/v1/workflows?limit=100"))
-    current = next((item for item in existing if item.get("name") == document["name"]), None)
-    payload = {
-        "name": document["name"],
-        "description": document.get("description"),
-        "labels": {"source": "agilleyrh/aap-lightwell-patch-demo", "demo": "lightwell"},
-        "workflow_definition": document,
-        "project_id": project["id"],
-    }
-    if current:
-        ao.request(
-            f"/api/v1/workflows/{current['id']}",
-            "PATCH",
-            {
-                "description": payload["description"],
-                "labels": payload["labels"],
-                "workflow_definition": document,
-                "change_description": "Updated Lightwell intelligent patch pipeline",
-            },
-        )
-        workflow_id = current["id"]
-        print(f"  updated AO workflow: {document['name']}")
-    else:
-        created = ao.request("/api/v1/workflows", "POST", payload)
-        workflow_id = created["id"]
-        print(f"  created AO workflow: {document['name']}")
+    workflows: list[dict[str, Any]] = []
+    for scenario in AO_DEMO_WORKFLOWS:
+        document = build_ao_demo_workflow(base, scenario)
+        bind_ao_runtime(document, aap_cred, aap_int, agent_llm)
+        result = upsert_ao_workflow(ao, project["id"], document, existing)
+        result["webhook_path"] = scenario["webhook_path"]
+        result["webhook_url"] = f"https://{host}/api/v1/webhooks/{scenario['webhook_path']}"
+        workflows.append(result)
+        existing = ao_items(ao.request("/api/v1/workflows?limit=100"))
 
-    versions = ao_items(ao.request(f"/api/v1/workflows/{workflow_id}/versions?limit=10"))
-    version = max(versions, key=lambda item: item.get("version") or 0) if versions else None
-    published = False
-    if version:
-        version_number = version.get("version", 1)
-        try:
-            ao.request(
-                f"/api/v1/workflows/{workflow_id}/versions/{version_number}/publish",
-                "POST",
-                {"change_description": "Publish Lightwell demo"},
-            )
-            published = True
-            print(f"  published AO workflow version {version_number}")
-        except RuntimeError as exc:
-            print(f"  warning: AO publish skipped: {exc}")
-    webhook_url = f"https://{host}/api/v1/webhooks/lightwell-advisory"
     return {
-        "workflow_id": workflow_id,
+        "workflows": workflows,
         "project_id": project["id"],
-        "published": published,
-        "webhook_url": webhook_url,
+        "webhook_url": workflows[0]["webhook_url"] if workflows else "",
         "ui": f"https://{host}/",
     }
 
@@ -651,20 +793,28 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-url", default=os.environ.get("LIGHTWELL_PROJECT_URL", PROJECT_URL_DEFAULT))
     parser.add_argument("--project-branch", default=os.environ.get("LIGHTWELL_PROJECT_BRANCH", "main"))
+    parser.add_argument("--skip-controller", action="store_true")
     parser.add_argument("--skip-eda", action="store_true")
     parser.add_argument("--skip-ao", action="store_true")
     args = parser.parse_args()
 
-    aap_host, aap_password = discover_aap()
-    api = aap_login(aap_host, "admin", aap_password)
-    controller = provision_controller(api, args.project_url, args.project_branch)
+    controller: dict[str, Any] = {}
+    aap_host = ""
+    if not args.skip_controller:
+        aap_host, aap_password = discover_aap()
+        api = aap_login(aap_host, "admin", aap_password)
+        controller = provision_controller(api, args.project_url, args.project_branch)
+    else:
+        print("Skipping AAP Controller provisioning")
 
     eda: dict[str, Any] = {}
-    if not args.skip_eda:
+    if not args.skip_eda and not args.skip_controller:
         try:
             eda = provision_eda(api, controller, args.project_url, args.project_branch, api.token or "", aap_host)
         except RuntimeError as exc:
             print(f"EDA configuration failed: {exc}")
+    elif args.skip_eda:
+        print("Skipping EDA provisioning")
 
     ao: dict[str, Any] = {}
     if not args.skip_ao:
@@ -677,18 +827,25 @@ def main() -> int:
         else:
             print("AO host/password not found; skipping AO import")
 
+    ao_workflows = ao.get("workflows") or []
     summary = {
-        "aap": f"https://{aap_host}/",
+        "aap": f"https://{aap_host}/" if aap_host else None,
         "workflow": WORKFLOW_NAME,
-        "workflow_id": controller["workflow_id"],
+        "workflow_id": controller.get("workflow_id"),
         "project": PROJECT_NAME,
         "eda_event_stream": (eda.get("event_stream") or {}).get("url") or (eda.get("event_stream") or {}).get("uuid"),
         "eda_event_stream_id": (eda.get("event_stream") or {}).get("id"),
         "eda_activation_enabled": eda.get("activation_enabled"),
-        "ao_workflow": "Lightwell Intelligent Patch Pipeline",
-        "ao_webhook_url": ao.get("webhook_url"),
+        "ao_workflows": [
+            {"name": item["name"], "id": item["id"], "webhook_url": item["webhook_url"], "published": item["published"]}
+            for item in ao_workflows
+        ],
         "ao_ui": ao.get("ui"),
-        "sample_event": "events/lightwell-critical-advisory.json",
+        "sample_events": {
+            "auto_apply": "events/lightwell-critical-advisory.json",
+            "prod_approval": "events/lightwell-prod-approval.json",
+            "investigate": "events/lightwell-investigate.json",
+        },
     }
     print("\nLightwell demo is configured:\n")
     print(json.dumps(summary, indent=2))
