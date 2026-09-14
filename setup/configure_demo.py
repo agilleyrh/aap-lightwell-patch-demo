@@ -197,6 +197,22 @@ def discover_aap() -> tuple[str, str]:
     return host, password
 
 
+def eda_controller_url() -> str:
+    """Controller URL used from EDA activation pods (in-cluster).
+
+    Activation pods cannot resolve CRC/MicroShift routes such as
+    ``aap-aap-operator.apps.crc.testing`` because the DNS operator wipes the
+    CoreDNS rewrite. ansible-rulebook then hangs on Controller connect and EDA
+    reports ``Readiness check for ansible-rulebook timed out``.
+    """
+    override = os.environ.get("LIGHTWELL_EDA_CONTROLLER_HOST")
+    if override:
+        return override.rstrip("/") + "/"
+    ns = os.environ.get("AAP_NAMESPACE") or os.environ.get("AAP_DEMO_NAMESPACE") or "aap-operator"
+    svc = os.environ.get("LIGHTWELL_EDA_CONTROLLER_SERVICE", "aap")
+    return f"http://{svc}.{ns}.svc.cluster.local/api/controller/"
+
+
 def discover_ao() -> tuple[str, str]:
     host = os.environ.get("AO_HOST") or run(
         [
@@ -487,9 +503,10 @@ def provision_eda(api: API, controller: dict[str, Any], project_url: str, projec
             "organization_id": org["id"],
             "credential_type_id": 4,
             "inputs": {
-                "host": f"https://{aap_host}/api/controller/",
+                "host": eda_controller_url(),
                 "oauth_token": aap_token,
                 "verify_ssl": False,
+                "request_timeout": "30",
             },
         },
     )

@@ -108,6 +108,12 @@ Enable the EDA activation when you want Demo 1 live (it starts another pod):
 LIGHTWELL_ENABLE_EDA=1 python3 setup/configure_demo.py
 ```
 
+The EDA **AAP Controller** credential must use the in-cluster gateway
+(`http://aap.aap-operator.svc.cluster.local/api/controller/`), not the CRC
+route. Activation pods cannot resolve `*.apps.crc.testing`, and ansible-rulebook
+then fails readiness with `Readiness check for ansible-rulebook timed out`.
+Override with `LIGHTWELL_EDA_CONTROLLER_HOST` if needed.
+
 On this `aap-demo` cluster the setup has already been applied:
 
 | Resource | Name / URL |
